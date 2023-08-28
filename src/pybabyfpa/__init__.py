@@ -3,7 +3,7 @@ import logging
 import aiohttp
 import asyncio
 import urllib.parse
-
+ 
 _LOGGER = logging.getLogger(__name__)
 
 __version__ = '0.0.6'
@@ -202,17 +202,19 @@ class FpaDeviceClient:
                     self.fpa._call_listeners(device)
 
                     self.delay_seconds = 1
-
-                    while not ws.closed:
-                        msg = await ws.receive_json()
-                        if msg['subject'] == 'shadow-update':
-                            device = self.fpa._find_device(msg['body']['deviceId'])
-                            if not device.has_details:
-                                await self.fpa.get_device_details(device.device_id)
-                            device.shadow.update(msg['body'])
-                            self.fpa._call_listeners(device)
-                        else:
-                            _LOGGER.info(f"Unknown subject '{msg['subject']}': {str(msg['body'])}")
+                    if ws.close_code == aiohttp.WSCloseCode.GOING_AWAY:
+                        _LOGGER.error("Server is going away")
+                    else:
+                        while not ws.closed:
+                            msg = await ws.receive_json()
+                            if msg['subject'] == 'shadow-update':
+                                device = self.fpa._find_device(msg['body']['deviceId'])
+                                if not device.has_details:
+                                    await self.fpa.get_device_details(device.device_id)
+                                device.shadow.update(msg['body'])
+                                self.fpa._call_listeners(device)
+                            else:
+                                _LOGGER.info(f"Unknown subject '{msg['subject']}': {str(msg['body'])}")
                 except Exception as exc:
                     _LOGGER.exception("Exception on WebSockets")
                 finally:
