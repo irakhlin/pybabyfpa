@@ -1,8 +1,12 @@
-from typing import List, Callable
+from ast import Not
+from typing import List, Callable, Any, cast
 import logging
 import aiohttp
 import asyncio
+import json
 import urllib.parse
+
+from click import Option
  
 _LOGGER = logging.getLogger(__name__)
 
@@ -188,6 +192,17 @@ class FpaDeviceClient:
                 await self._ws.ping()
             await asyncio.sleep(self.ping_seconds)
 
+    async def _receive_json(response: aiohttp.ClientWebSocketResponse) -> Any:
+        msg = await response.receive()
+        if msg == aiohttp.http.WS_CLOSED_MESSAGE or msg == aiohttp.http.WS_CLOSING_MESSAGE:
+            await response.close()
+            return None
+        
+        if msg.type != aiohttp.WSMsgType.TEXT:
+            raise TypeError(f"Received message {msg.type}:{msg.data!r} is not str")
+        str_msg = cast(str, msg.data)
+        return json.loads(str_msg)
+    
     async def _client(self):
         while not self.fpa.closed:
             device = self.fpa._find_device(self.device_id)
@@ -202,11 +217,10 @@ class FpaDeviceClient:
                     self.fpa._call_listeners(device)
 
                     self.delay_seconds = 1
-                    if ws.close_code == aiohttp.WSCloseCode.GOING_AWAY:
-                        _LOGGER.error("Server is going away")
-                    else:
-                        while not ws.closed:
-                            msg = await ws.receive_json()
+
+                    while not ws.closed:
+                        msg = await self._receive_json(ws)
+                        if msg is not None:
                             if msg['subject'] == 'shadow-update':
                                 device = self.fpa._find_device(msg['body']['deviceId'])
                                 if not device.has_details:
@@ -215,6 +229,7 @@ class FpaDeviceClient:
                                 self.fpa._call_listeners(device)
                             else:
                                 _LOGGER.info(f"Unknown subject '{msg['subject']}': {str(msg['body'])}")
+
                 except Exception as exc:
                     _LOGGER.exception("Exception on WebSockets")
                 finally:
