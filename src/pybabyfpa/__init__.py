@@ -198,8 +198,10 @@ class FpaDeviceClient:
             await response.close()
             return None
         
-        if msg.type != aiohttp.WSMsgType.TEXT:
-            raise TypeError(f"Received message {msg.type}:{msg.data!r} is not str")
+        if msg.type != aiohttp.WSMsgType.TEXT or f"{msg.type}:{msg.data!r}" == "8:1001":
+            _LOGGER.error(f"Received message {msg.type}:{msg.data!r} is not str") 
+            await response.close()
+            return None
         str_msg = cast(str, msg.data)
         return json.loads(str_msg)
     
