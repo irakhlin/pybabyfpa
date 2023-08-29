@@ -10,7 +10,7 @@ from click import Option
  
 _LOGGER = logging.getLogger(__name__)
 
-__version__ = '0.0.6'
+__version__ = '0.0.8'
 
 class FpaError(Exception):
     code: int
@@ -192,7 +192,7 @@ class FpaDeviceClient:
                 await self._ws.ping()
             await asyncio.sleep(self.ping_seconds)
 
-    async def _receive_json(response: aiohttp.ClientWebSocketResponse) -> Any:
+    async def _receive_json(self, response: aiohttp.ClientWebSocketResponse) -> Any:
         msg = await response.receive()
         if msg == aiohttp.http.WS_CLOSED_MESSAGE or msg == aiohttp.http.WS_CLOSING_MESSAGE:
             await response.close()
