@@ -10,7 +10,7 @@ from click import Option
  
 _LOGGER = logging.getLogger(__name__)
 
-__version__ = '0.0.9'
+__version__ = '0.1.0'
 
 class FpaError(Exception):
     code: int
@@ -195,12 +195,9 @@ class FpaDeviceClient:
     async def _receive_json(self, response: aiohttp.ClientWebSocketResponse) -> Any:
         msg = await response.receive()
         if msg == aiohttp.http.WS_CLOSED_MESSAGE or msg == aiohttp.http.WS_CLOSING_MESSAGE:
-            await response.close()
             return None
         
         if msg.type != aiohttp.WSMsgType.TEXT or f"{msg.type}:{msg.data!r}" == "8:1001":
-            _LOGGER.error(f"Received message {msg.type}:{msg.data!r} is not str") 
-            await response.close()
             return None
         str_msg = cast(str, msg.data)
         return json.loads(str_msg)
@@ -222,15 +219,18 @@ class FpaDeviceClient:
 
                     while not ws.closed:
                         msg = await self._receive_json(ws)
-                        if msg is not None:
-                            if msg['subject'] == 'shadow-update':
-                                device = self.fpa._find_device(msg['body']['deviceId'])
-                                if not device.has_details:
-                                    await self.fpa.get_device_details(device.device_id)
-                                device.shadow.update(msg['body'])
-                                self.fpa._call_listeners(device)
-                            else:
-                                _LOGGER.info(f"Unknown subject '{msg['subject']}': {str(msg['body'])}")
+                        if msg is None:
+                            ws.close()
+                            break
+
+                        if msg['subject'] == 'shadow-update':
+                            device = self.fpa._find_device(msg['body']['deviceId'])
+                            if not device.has_details:
+                                await self.fpa.get_device_details(device.device_id)
+                            device.shadow.update(msg['body'])
+                            self.fpa._call_listeners(device)
+                        else:
+                            _LOGGER.info(f"Unknown subject '{msg['subject']}': {str(msg['body'])}")
 
                 except Exception as exc:
                     _LOGGER.exception("Exception on WebSockets")
